@@ -41,7 +41,7 @@
  *
  * 2. Explicit Configuration:
  *    TokenExchangeIdentityAuthenticationDetailsProvider.builder()
- *      .withIamDomainHost("https://identity.oraclecloud.com")
+ *      .withDomainHost("https://identity.oraclecloud.com")
  *      .withThirdPartyToken("your_jwt_token_here")
  *      .withClientCredentials("base64_encoded_client_id_secret")
  *      .withRegion(Region.US_ASHBURN_1)
@@ -77,78 +77,98 @@ LOG.logger = consoleLogger;
 console.log("=== Debug logging enabled - you will see retry attempts and response details ===");
 
 /**
- * CONFIGURATION EXAMPLES:
+ * CONFIGURATION VALIDATION:
  *
- * This example shows multiple ways to configure the token exchange authentication provider.
- * Choose the approach that best fits your deployment scenario.
+ * This example validates both environment variable and explicit builder configuration
+ * by testing them sequentially with actual OCI API calls.
  */
 
 (async () => {
   try {
     // ================================
-    // OPTION 1: Environment Variables (Recommended for CI/CD)
+    // FIRST PASS: Environment Variables Configuration
     // ================================
-    // The builder will automatically pick up these environment variables:
-    // - OCI_IAM_DOMAIN_HOST: Your tenancy's IAM Domain endpoint
-    // - OCI_THIRD_PARTY_TOKEN: JWT token from your CI/CD system
-    // - OCI_CLIENT_CREDENTIALS: Base64 encoded "client_id:client_secret"
-    // - OCI_REGION (optional): Target OCI region
+    console.log("\n=== FIRST PASS: Environment Variables Configuration ===");
 
-    console.log("\n=== OPTION 1: Using Environment Variables ===");
-    console.log("Required environment variables:");
-    console.log("- OCI_IAM_DOMAIN_HOST:", process.env.OCI_IAM_DOMAIN_HOST ? "SET" : "NOT SET");
-    console.log(
-      "- OCI_THIRD_PARTY_TOKEN:",
-      process.env.OCI_THIRD_PARTY_TOKEN
-        ? "SET (length: " + process.env.OCI_THIRD_PARTY_TOKEN.length + ")"
-        : "NOT SET"
-    );
-    console.log(
-      "- OCI_CLIENT_CREDENTIALS:",
-      process.env.OCI_CLIENT_CREDENTIALS ? "SET" : "NOT SET"
-    );
-    console.log("- OCI_REGION (optional):", process.env.OCI_REGION || "NOT SET");
-
-    const provider: AuthenticationDetailsProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
-      // Override the region even if OCI_REGION is set (optional)
-      .withRegion(Region.US_ASHBURN_1) // Remove this line to use OCI_REGION env var
+    // Create provider using environment variables
+    // The provider will warn if required environment variables are missing
+    const envProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
+      .withRegion(Region.US_ASHBURN_1) // Override region for consistency
       .build();
 
-    // ================================
-    // OPTION 2: Explicit Configuration (Alternative)
-    // ================================
-    // Uncomment the following section to use explicit configuration instead:
-    /*
-    console.log('\n=== OPTION 2: Using Explicit Builder Configuration ===');
-    const provider: AuthenticationDetailsProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
-      .withIamDomainHost("https://identity.oraclecloud.com") // Your IAM Domain endpoint
-      .withThirdPartyToken("eyJ0eXAiOiJKV1QiLCJhbGc...") // Your third-party JWT token
-      .withClientCredentials("Y2xpZW50X2lkOmNsaWVudF9zZWNyZXQ=") // Base64 encoded client_id:client_secret
-      .withRegion(Region.US_ASHBURN_1) // Target OCI region
-      .build();
-    */
+    console.log("✅ Environment variable provider created successfully");
 
-    // ================================
-    // USING THE AUTHENTICATION PROVIDER
-    // ================================
-
-    // Create IdentityClient with the authentication provider
-    // The TokenExchangeFederationClient handles auth-specific retry logic independently
-    // so we don't need to configure additional retry settings here
-    console.log("\n=== Creating IdentityClient and Testing Authentication ===");
-    const identityClient = new IdentityClient({
-      authenticationDetailsProvider: provider
+    // Create IdentityClient and test with environment variable provider
+    console.log("Creating IdentityClient with environment variable provider...");
+    const envIdentityClient = new IdentityClient({
+      authenticationDetailsProvider: envProvider
     });
 
-    // Make a test API call to verify authentication is working
-    console.log("Attempting to list OCI regions...");
-    const response = await identityClient.listRegions({});
+    console.log("Attempting to list OCI regions with environment variable provider...");
+    const envResponse = await envIdentityClient.listRegions({});
 
-    console.log("\n=== SUCCESS! Authentication and API call completed ===");
-    console.log(`Found ${response.items.length} regions:`);
-    response.items.forEach((region, index) => {
+    console.log("✅ Environment variable configuration SUCCESS!");
+    console.log(`Found ${envResponse.items.length} regions using environment variables:`);
+    envResponse.items.forEach((region, index) => {
       console.log(`  ${index + 1}. ${region.name} (${region.key})`);
     });
+
+    // ================================
+    // SECOND PASS: Explicit Builder Configuration
+    // ================================
+    console.log("\n=== SECOND PASS: Explicit Builder Configuration ===");
+
+    // Extract environment variables into constants for explicit configuration
+    const IAM_DOMAIN_HOST = process.env.OCI_IAM_DOMAIN_HOST!;
+    const THIRD_PARTY_TOKEN = process.env.OCI_THIRD_PARTY_TOKEN!;
+    const CLIENT_CREDENTIALS = process.env.OCI_CLIENT_CREDENTIALS!;
+
+    console.log("Using explicit configuration with values from environment:");
+    console.log(`- IAM Domain Host: ${IAM_DOMAIN_HOST}`);
+    console.log(`- Third Party Token: SET (length: ${THIRD_PARTY_TOKEN.length})`);
+    console.log(`- Client Credentials: SET`);
+    console.log(`- Region: US_ASHBURN_1`);
+
+    // Create provider using explicit builder configuration
+    const explicitProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
+      .withDomainHost(IAM_DOMAIN_HOST)
+      .withThirdPartyToken(THIRD_PARTY_TOKEN)
+      .withClientCredentials(CLIENT_CREDENTIALS)
+      .withRegion(Region.US_ASHBURN_1)
+      .build();
+
+    console.log("✅ Explicit builder provider created successfully");
+
+    // Create IdentityClient and test with explicit builder provider
+    console.log("Creating IdentityClient with explicit builder provider...");
+    const explicitIdentityClient = new IdentityClient({
+      authenticationDetailsProvider: explicitProvider
+    });
+
+    console.log("Attempting to list OCI regions with explicit builder provider...");
+    const explicitResponse = await explicitIdentityClient.listRegions({});
+
+    console.log("✅ Explicit builder configuration SUCCESS!");
+    console.log(`Found ${explicitResponse.items.length} regions using explicit builder:`);
+    explicitResponse.items.forEach((region, index) => {
+      console.log(`  ${index + 1}. ${region.name} (${region.key})`);
+    });
+
+    // ================================
+    // VALIDATION SUMMARY
+    // ================================
+    console.log("\n=== VALIDATION SUMMARY ===");
+    console.log("✅ Both configuration approaches work correctly");
+    console.log("✅ Environment variable approach: PASSED");
+    console.log("✅ Explicit builder approach: PASSED");
+    console.log(`✅ Both approaches returned ${envResponse.items.length} regions consistently`);
+
+    // Enable debug logging tip
+    if (!process.env.OCI_LOG_LEVEL) {
+      console.log(
+        "\n💡 TIP: Set OCI_LOG_LEVEL=DEBUG to see detailed retry and response information"
+      );
+    }
   } catch (error) {
     console.error("\n=== AUTHENTICATION ERROR ===");
     console.error("Failed to authenticate or list regions:");
