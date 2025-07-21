@@ -32,8 +32,9 @@ import AuthUtils from "./helpers/auth-utils";
  * 4. Better debugging: Clear separation between auth retries vs other SDK operation
  *    retries in logs, making authentication issues easier to diagnose.
  *
- * When using this authentication provider, configure SDK clients with NoRetryConfigurationDetails
- * to disable SDK-level retries and avoid dual retry mechanisms.
+ * The custom retry mechanism automatically prevents SDK-level retries by setting
+ * shouldBeRetried=false on final errors, eliminating dual retry mechanisms without
+ * requiring additional client configuration.
  */
 
 const TOKEN_EXCHANGE_GENERIC_ERROR =
