@@ -51,7 +51,7 @@ export default class TokenExchangeFederationClient implements FederationClient {
 
   constructor(
     private tokenExchangeEndpoint: string,
-    private subjectToken: string,
+    private subjectToken: string | (() => Promise<string>),
     private sessionKeySupplier: SessionKeySupplier,
     private clientCred: string
   ) {
@@ -248,11 +248,37 @@ export default class TokenExchangeFederationClient implements FederationClient {
     try {
       // Create request body and call auth service.
       const url = this.tokenExchangeEndpoint;
+
+      // Resolve the subject token:
+      // - If subjectToken is a callback, invoke it to get fresh token each time
+      // - If subjectToken is a string, use it directly
+      let resolvedSubjectToken: string;
+
+      if (typeof this.subjectToken === "function") {
+        // Callback has highest precedence - invoke it to get fresh token
+        try {
+          resolvedSubjectToken = await this.subjectToken();
+        } catch (error) {
+          throw new Error(
+            `Failed to get token from callback: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`
+          );
+        }
+      } else {
+        // Use the provided string token (this already includes the precedence logic from the builder)
+        resolvedSubjectToken = this.subjectToken;
+      }
+
+      if (!resolvedSubjectToken) {
+        throw new Error("Resolved subject token is empty or null");
+      }
+
       const requestPayload = new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
         requested_token_type: "urn:oci:token-type:oci-upst",
         public_key: AuthUtils.sanitizeCertificateString(publicKey),
-        subject_token: this.subjectToken,
+        subject_token: resolvedSubjectToken,
         subject_token_type: "jwt"
       }).toString();
 

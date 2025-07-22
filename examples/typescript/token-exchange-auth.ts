@@ -47,6 +47,15 @@
  *      .withRegion(Region.US_ASHBURN_1)
  *      .build()
  *
+ * 3. Callback Provider (Fresh tokens on each exchange):
+ *    TokenExchangeIdentityAuthenticationDetailsProvider.builder()
+ *      .withThirdPartyTokenProviderCallback(async () => {
+ *        // Fetch fresh token from external source
+ *        return await getLatestTokenFromExternalSource();
+ *      })
+ *      .withRegion(Region.US_ASHBURN_1)  // Other values from environment
+ *      .build()
+ *
  * RETRY BEHAVIOR:
  * The TokenExchangeFederationClient implements custom retry logic:
  * - 3 attempts maximum for authentication requests ( TBD make this configurable in the future )
@@ -79,106 +88,57 @@ console.log("=== Debug logging enabled - you will see retry attempts and respons
 /**
  * CONFIGURATION VALIDATION:
  *
- * This example validates both environment variable and explicit builder configuration
- * by testing them sequentially with actual OCI API calls.
+ * This example validates all three authentication configuration approaches
+ * by testing them sequentially with actual OCI API calls:
+ *
+ * 1. Environment Variables - Uses all values from environment variables
+ * 2. Explicit Builder - Sets all values explicitly via builder methods
+ * 3. Callback Provider - Uses callback for third-party token, environment for others
  */
 
 (async () => {
-  try {
-    // ================================
-    // FIRST PASS: Environment Variables Configuration
-    // ================================
-    console.log("\n=== FIRST PASS: Environment Variables Configuration ===");
+  // Example 1: Environment Variables (Automatic)
+  console.log("[Example 1] Using environment variables:");
+  console.log("OCI_IAM_DOMAIN_HOST:", process.env.OCI_IAM_DOMAIN_HOST);
+  console.log("OCI_THIRD_PARTY_TOKEN:", process.env.OCI_THIRD_PARTY_TOKEN ? "SET" : "NOT SET");
+  console.log("OCI_CLIENT_CREDENTIALS:", process.env.OCI_CLIENT_CREDENTIALS ? "SET" : "NOT SET");
+  console.log("OCI_REGION:", process.env.OCI_REGION);
+  const envProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
+    .withRegion(Region.US_ASHBURN_1)
+    .build();
+  const envIdentityClient = new IdentityClient({ authenticationDetailsProvider: envProvider });
+  const envResponse = await envIdentityClient.listRegions({});
+  console.log("[Example 1] Regions:", envResponse.items.map(r => r.name).join(", "));
 
-    // Create provider using environment variables
-    // The provider will warn if required environment variables are missing
-    const envProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
-      .withRegion(Region.US_ASHBURN_1) // Override region for consistency
-      .build();
+  // Example 2: Explicit Builder Configuration
+  const IAM_DOMAIN_HOST = process.env.OCI_IAM_DOMAIN_HOST!;
+  const THIRD_PARTY_TOKEN = process.env.OCI_THIRD_PARTY_TOKEN!;
+  const CLIENT_CREDENTIALS = process.env.OCI_CLIENT_CREDENTIALS!;
+  const explicitProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
+    .withDomainHost(IAM_DOMAIN_HOST)
+    .withThirdPartyToken(THIRD_PARTY_TOKEN)
+    .withClientCredentials(CLIENT_CREDENTIALS)
+    .withRegion(Region.US_ASHBURN_1)
+    .build();
+  const explicitIdentityClient = new IdentityClient({
+    authenticationDetailsProvider: explicitProvider
+  });
+  const explicitResponse = await explicitIdentityClient.listRegions({});
+  console.log("[Example 2] Regions:", explicitResponse.items.map(r => r.name).join(", "));
 
-    console.log("✅ Environment variable provider created successfully");
-
-    // Create IdentityClient and test with environment variable provider
-    console.log("Creating IdentityClient with environment variable provider...");
-    const envIdentityClient = new IdentityClient({
-      authenticationDetailsProvider: envProvider
-    });
-
-    console.log("Attempting to list OCI regions with environment variable provider...");
-    const envResponse = await envIdentityClient.listRegions({});
-
-    console.log("✅ Environment variable configuration SUCCESS!");
-    console.log(`Found ${envResponse.items.length} regions using environment variables:`);
-    envResponse.items.forEach((region, index) => {
-      console.log(`  ${index + 1}. ${region.name} (${region.key})`);
-    });
-
-    // ================================
-    // SECOND PASS: Explicit Builder Configuration
-    // ================================
-    console.log("\n=== SECOND PASS: Explicit Builder Configuration ===");
-
-    // Extract environment variables into constants for explicit configuration
-    const IAM_DOMAIN_HOST = process.env.OCI_IAM_DOMAIN_HOST!;
-    const THIRD_PARTY_TOKEN = process.env.OCI_THIRD_PARTY_TOKEN!;
-    const CLIENT_CREDENTIALS = process.env.OCI_CLIENT_CREDENTIALS!;
-
-    console.log("Using explicit configuration with values from environment:");
-    console.log(`- IAM Domain Host: ${IAM_DOMAIN_HOST}`);
-    console.log(`- Third Party Token: SET (length: ${THIRD_PARTY_TOKEN.length})`);
-    console.log(`- Client Credentials: SET`);
-    console.log(`- Region: US_ASHBURN_1`);
-
-    // Create provider using explicit builder configuration
-    const explicitProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
-      .withDomainHost(IAM_DOMAIN_HOST)
-      .withThirdPartyToken(THIRD_PARTY_TOKEN)
-      .withClientCredentials(CLIENT_CREDENTIALS)
-      .withRegion(Region.US_ASHBURN_1)
-      .build();
-
-    console.log("✅ Explicit builder provider created successfully");
-
-    // Create IdentityClient and test with explicit builder provider
-    console.log("Creating IdentityClient with explicit builder provider...");
-    const explicitIdentityClient = new IdentityClient({
-      authenticationDetailsProvider: explicitProvider
-    });
-
-    console.log("Attempting to list OCI regions with explicit builder provider...");
-    const explicitResponse = await explicitIdentityClient.listRegions({});
-
-    console.log("✅ Explicit builder configuration SUCCESS!");
-    console.log(`Found ${explicitResponse.items.length} regions using explicit builder:`);
-    explicitResponse.items.forEach((region, index) => {
-      console.log(`  ${index + 1}. ${region.name} (${region.key})`);
-    });
-
-    // ================================
-    // VALIDATION SUMMARY
-    // ================================
-    console.log("\n=== VALIDATION SUMMARY ===");
-    console.log("✅ Both configuration approaches work correctly");
-    console.log("✅ Environment variable approach: PASSED");
-    console.log("✅ Explicit builder approach: PASSED");
-    console.log(`✅ Both approaches returned ${envResponse.items.length} regions consistently`);
-
-    // Enable debug logging tip
-    if (!process.env.OCI_LOG_LEVEL) {
-      console.log(
-        "\n💡 TIP: Set OCI_LOG_LEVEL=DEBUG to see detailed retry and response information"
-      );
-    }
-  } catch (error) {
-    console.error("\n=== AUTHENTICATION ERROR ===");
-    console.error("Failed to authenticate or list regions:");
-    console.error(error);
-    console.log("\n=== TROUBLESHOOTING TIPS ===");
-    console.log("1. Verify all required environment variables are set correctly");
-    console.log("2. Check that your client credentials are valid and properly base64 encoded");
-    console.log("3. Ensure your third-party token is valid and not expired");
-    console.log("4. Verify the IAM Domain host URL is correct for your tenancy");
-    console.log("5. Check the debug logs above for detailed error information");
-    console.log("6. Review response body details in debug logs to identify parsing issues");
-  }
+  // Example 3: Callback Provider (Fresh tokens on each exchange)
+  const thirdPartyTokenCallback = async (): Promise<string> => {
+    const token = process.env.OCI_THIRD_PARTY_TOKEN;
+    if (!token) throw new Error("OCI_THIRD_PARTY_TOKEN environment variable is not set");
+    return token;
+  };
+  const callbackProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
+    .withThirdPartyTokenProviderCallback(thirdPartyTokenCallback)
+    .withRegion(Region.US_ASHBURN_1)
+    .build();
+  const callbackIdentityClient = new IdentityClient({
+    authenticationDetailsProvider: callbackProvider
+  });
+  const callbackResponse = await callbackIdentityClient.listRegions({});
+  console.log("[Example 3] Regions:", callbackResponse.items.map(r => r.name).join(", "));
 })();
