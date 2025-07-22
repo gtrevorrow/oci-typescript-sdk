@@ -65,8 +65,6 @@ export default class TokenExchangeIdentityAuthenticationDetailsProvider
     }
   }
 
-  // Builder method to create OkeWorkloadIdentityAuthenticationDetailsProviderBuilder which will build
-  // OkeWorkloadIdentityAuthenticationDetailsProvider
   public static builder(): TokenExchangeIdentityAuthenticationDetailsProviderBuilder {
     return new TokenExchangeIdentityAuthenticationDetailsProviderBuilder();
   }
