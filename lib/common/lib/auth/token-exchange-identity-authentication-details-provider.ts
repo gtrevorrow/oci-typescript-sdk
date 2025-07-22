@@ -17,7 +17,7 @@ export default class TokenExchangeIdentityAuthenticationDetailsProvider
   implements RegionProvider, RefreshableOnNotAuthenticatedProvider<String> {
   // Environment variable names
   public static readonly IAM_DOMAIN_HOST_ENV_VAR_NAME = "OCI_IAM_DOMAIN_HOST";
-  public static readonly THIRD_PARTY_TOKEN_ENV_VAR_NAME = "OCI_THIRD_PARTY_TOKEN";
+  public static readonly SUBJECT_TOKEN_ENV_VAR_NAME = "OCI_SUBJECT_TOKEN";
 
   // session key supplier
   protected _sessionKeySupplier!: SessionKeySupplier;
@@ -74,8 +74,13 @@ export default class TokenExchangeIdentityAuthenticationDetailsProvider
 
 class TokenExchangeIdentityAuthenticationDetailsProviderBuilder {
   domainHost: string | undefined;
-  thirdPartyToken: string | undefined;
-  thirdPartyTokenProviderCallback: (() => Promise<string>) | undefined;
+  /**
+   * The subject token to exchange for an OCI token.
+   * Can be either:
+   * - a string (static token)
+   * - a function returning Promise<string> (dynamic provider, called each time a token is needed)
+   */
+  subjectToken: string | (() => Promise<string>) | undefined;
   clientCred: string | undefined;
   region!: Region;
 
@@ -93,20 +98,14 @@ class TokenExchangeIdentityAuthenticationDetailsProviderBuilder {
     return this;
   }
 
-  public withThirdPartyToken(
-    thirdPartyToken: string
+  /**
+   * Sets the subject token to exchange for an OCI token.
+   * @param subjectToken - Either a string (static token) or a function returning Promise<string> (dynamic provider).
+   */
+  public withSubjectToken(
+    subjectToken: string | (() => Promise<string>)
   ): TokenExchangeIdentityAuthenticationDetailsProviderBuilder {
-    this.thirdPartyToken = thirdPartyToken;
-    return this;
-  }
-
-  public withThirdPartyTokenProviderCallback(
-    thirdPartyTokenProviderCallback: () => Promise<string>
-  ): TokenExchangeIdentityAuthenticationDetailsProviderBuilder {
-    // Store the callback - it will be invoked each time a new UPST token is requested,
-    // ensuring fresh third-party tokens are used for each token exchange operation.
-    // This callback takes precedence over any static token values.
-    this.thirdPartyTokenProviderCallback = thirdPartyTokenProviderCallback;
+    this.subjectToken = subjectToken;
     return this;
   }
 
@@ -131,29 +130,23 @@ class TokenExchangeIdentityAuthenticationDetailsProviderBuilder {
       );
     }
 
-    // Determine the third party token with proper precedence:
-    // 1. Callback (if provided) takes highest precedence - will be called each time token is needed
-    // 2. Direct thirdPartyToken value from builder
-    // 3. Environment variable as fallback
-    let thirdPartyToken: string | (() => Promise<string>);
+    // Determine the subject token with proper precedence:
+    // 1. Direct value from builder (string or function)
+    // 2. Environment variable as fallback
+    let subjectToken: string | (() => Promise<string>);
 
-    if (this.thirdPartyTokenProviderCallback) {
-      // Callback has highest precedence and will be called each time a fresh token is needed
-      thirdPartyToken = this.thirdPartyTokenProviderCallback;
+    if (this.subjectToken !== undefined) {
+      subjectToken = this.subjectToken;
     } else {
-      // Use direct value or fall back to environment variable
       const tokenValue =
-        this.thirdPartyToken ||
-        process.env[
-          TokenExchangeIdentityAuthenticationDetailsProvider.THIRD_PARTY_TOKEN_ENV_VAR_NAME
-        ];
+        process.env[TokenExchangeIdentityAuthenticationDetailsProvider.SUBJECT_TOKEN_ENV_VAR_NAME];
 
       if (!tokenValue) {
         throw Error(
-          `${TokenExchangeIdentityAuthenticationDetailsProvider.THIRD_PARTY_TOKEN_ENV_VAR_NAME} is missing. Please set it in the environment variables, use the builder's withThirdPartyToken method, or provide a callback with withThirdPartyTokenProviderCallback method.`
+          `${TokenExchangeIdentityAuthenticationDetailsProvider.SUBJECT_TOKEN_ENV_VAR_NAME} is missing. Please set it in the environment variables or use the builder's withSubjectToken method.`
         );
       }
-      thirdPartyToken = tokenValue;
+      subjectToken = tokenValue;
     }
 
     const clientCred = this.clientCred || process.env.OCI_CLIENT_CREDENTIALS;
@@ -167,7 +160,7 @@ class TokenExchangeIdentityAuthenticationDetailsProviderBuilder {
     sessionKeySupplier = new SessionKeySupplierImpl();
     federationClient = new TokenExchangeFederationClient(
       `https://${domainHost}/oauth2/v1/token`,
-      thirdPartyToken,
+      subjectToken,
       sessionKeySupplier,
       clientCred
     );

@@ -13,7 +13,7 @@ import { LOG } from "../log";
 import AuthUtils from "./helpers/auth-utils";
 
 /**
- * This class gets a security token from OCI IAM Domain token endpoint by exchanging a third party token.
+ * This class gets a security token from OCI IAM Domain token endpoint by exchanging a subject token.
  *
  * RETRY STRATEGY IMPLEMENTATION:
  * This class implements custom retry logic instead of relying on the SDK's default retry mechanism
@@ -62,7 +62,6 @@ export default class TokenExchangeFederationClient implements FederationClient {
    * Gets a security token. If there is already a valid token cached, it will be returned. Else this will make a call
    * to the OCI IAM Domain token endpoint to get a new token, using the provided suppliers.
    *
-   * This method is thread-safe.
    * @return the security token
    * @throws OciError If there is any issue with getting a token from the OCI IAM Domain token endpoint
    */
@@ -90,7 +89,7 @@ export default class TokenExchangeFederationClient implements FederationClient {
   private async refreshAndGetSecurityTokenInner(
     doFinalTokenValidityCheck: boolean
   ): Promise<string> {
-    // Check again to see if the JWT is still invalid, unless we want to skip that check
+    // Check again to see if the UPST is still invalid, unless we want to skip that check
     if (!doFinalTokenValidityCheck || !this.securityTokenAdapter.isValid()) {
       this.sessionKeySupplier.refreshKeys();
 
@@ -106,133 +105,88 @@ export default class TokenExchangeFederationClient implements FederationClient {
    * @return the security token, which is basically a JWT token string
    */
   private async getSecurityTokenFromServer(): Promise<SecurityTokenAdapter> {
-    const keyPair = this.sessionKeySupplier.getKeyPair();
-    if (!keyPair) {
-      throw Error("keyPair for session was not provided");
-    }
-    const publicKey = keyPair.getPublic();
-    if (!publicKey) {
-      throw Error("Public key is not present");
-    }
-
-    let response;
-    let lastKnownError;
-    let attemptNumber = 1;
+    let lastKnownError: any;
     const maxAttempts = TokenExchangeFederationClient.DEFAULT_AUTH_MAX_RETRY_COUNT;
     const delayMs = TokenExchangeFederationClient.DEFAULT_AUTH_MAX_DELAY_IN_SECONDS * 1000;
 
-    while (attemptNumber <= maxAttempts) {
-      if (LOG.logger) LOG.logger.debug(`Token request attempt ${attemptNumber} of ${maxAttempts}`);
-
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (LOG.logger) LOG.logger.debug(`Token request attempt ${attempt} of ${maxAttempts}`);
       try {
-        response = await this.getTokenAsync();
+        const response = await this.getTokenAsync();
 
-        // Success case - try to parse the response
-        if (response.status === 200) {
-          let responseBody;
-          let responseText;
-          try {
-            // First get the response as text for debugging purposes
-            responseText = await response.text();
-            if (LOG.logger) LOG.logger.debug(`Received response body: ${responseText}`);
-
-            // Then parse it as JSON
-            responseBody = JSON.parse(responseText);
-          } catch (e) {
-            lastKnownError = `Failed to read response body from OCI IAM Domain. ${TOKEN_EXCHANGE_GENERIC_ERROR}`;
-            if (LOG.logger) LOG.logger.error(lastKnownError);
-            if (LOG.logger && responseText) {
-              LOG.logger.debug(`Failed to parse JSON response. Raw response: ${responseText}`);
-            }
-            // JSON parsing error - could be transient, retry
-            if (attemptNumber < maxAttempts) {
-              if (LOG.logger)
-                LOG.logger.debug(`JSON parsing failed, retrying after ${delayMs}ms...`);
-              await delay(delayMs);
-              attemptNumber++;
-              continue;
-            } else {
-              break;
-            }
-          }
-
-          // Validate response body structure
-          if (!responseBody) {
-            lastKnownError = `Invalid (undefined) UPST token received from OCI IAM Domain. ${TOKEN_EXCHANGE_GENERIC_ERROR}`;
-            if (LOG.logger) LOG.logger.error(lastKnownError);
-            if (LOG.logger && responseText) {
-              LOG.logger.debug(`Response body validation failed. Raw response: ${responseText}`);
-            }
-          } else if (typeof responseBody.token !== "string") {
-            lastKnownError = `Invalid (string) UPST token received from OCI IAM Domain. ${TOKEN_EXCHANGE_GENERIC_ERROR}`;
-            if (LOG.logger) LOG.logger.error(lastKnownError);
-            if (LOG.logger) {
-              LOG.logger.debug(
-                `Response body validation failed. Expected 'token' to be string, got: ${typeof responseBody.token}`
-              );
-              LOG.logger.debug(`Full response body: ${JSON.stringify(responseBody, null, 2)}`);
-            }
-          } else {
-            const token = responseBody.token;
-            if (!token || token.length === 0) {
-              lastKnownError = `Invalid (empty) UPST token received from OCI IAM Domain. ${TOKEN_EXCHANGE_GENERIC_ERROR}`;
-              if (LOG.logger) LOG.logger.error(lastKnownError);
-              if (LOG.logger) {
-                LOG.logger.debug(
-                  `Response body validation failed. Token is empty or null. Token length: ${
-                    token ? token.length : "null"
-                  }`
-                );
-                LOG.logger.debug(`Full response body: ${JSON.stringify(responseBody, null, 2)}`);
-              }
-            } else {
-              // Success! Return the token
-              if (LOG.logger)
-                LOG.logger.debug(
-                  `Successfully received and validated access token. Token length: ${token.length}`
-                );
-              return new SecurityTokenAdapter(token, this.sessionKeySupplier);
-            }
-          }
-
-          // If we reach here, the response was malformed - don't retry these errors
-          if (LOG.logger)
-            LOG.logger.debug("Response validation failed - not retrying malformed response");
-          break;
-        }
-
-        // Handle non-success responses
-        lastKnownError = `${AUTH_TOKEN_GENERIC_ERROR}. Response received but failed with status: ${response.status}`;
-        if (LOG.logger) LOG.logger.error(lastKnownError);
-
-        // Don't retry 4xx errors (client errors)
+        // Handle non-retriable client errors first
         if (response.status >= 400 && response.status < 500) {
-          if (LOG.logger) LOG.logger.debug("Client error (4xx) - not retrying");
-          break;
+          if (LOG.logger) LOG.logger.debug(`Client error (${response.status}) - not retrying`);
+          lastKnownError = new Error(
+            `${AUTH_TOKEN_GENERIC_ERROR}. Response failed with status: ${response.status}`
+          );
+          break; // Exit loop for non-retriable errors
         }
+
+        // Handle retriable server-side errors
+        if (response.status >= 500) {
+          throw new Error(
+            `${AUTH_TOKEN_GENERIC_ERROR}. Response failed with status: ${response.status}`
+          );
+        }
+
+        // We now expect a 200 OK response. If not, treat as a retriable error.
+        if (response.status !== 200) {
+          throw new Error(
+            `${AUTH_TOKEN_GENERIC_ERROR}. Unexpected response status: ${response.status}`
+          );
+        }
+
+        // --- Success Path (status is 200) ---
+        const responseText = await response.text();
+        if (LOG.logger) LOG.logger.debug(`Received response body: ${responseText}`);
+
+        const responseBody = JSON.parse(responseText); // A SyntaxError here is retriable
+
+        if (typeof responseBody.token !== "string" || !responseBody.token) {
+          // A malformed token is a non-retriable error
+          lastKnownError = new Error(
+            `Invalid UPST token received from OCI IAM Domain. ${TOKEN_EXCHANGE_GENERIC_ERROR}`
+          );
+          if (LOG.logger) LOG.logger.error(lastKnownError.message);
+          if (LOG.logger)
+            LOG.logger.debug(`Full response body: ${JSON.stringify(responseBody, null, 2)}`);
+          break; // Exit loop
+        }
+
+        if (LOG.logger)
+          LOG.logger.debug(
+            `Successfully received and validated access token. Token length: ${responseBody.token.length}`
+          );
+        return new SecurityTokenAdapter(responseBody.token, this.sessionKeySupplier);
       } catch (e) {
-        lastKnownError = `${AUTH_TOKEN_GENERIC_ERROR}. Failed with error: ${e}`;
-        if (LOG.logger) LOG.logger.error(lastKnownError);
+        // This block catches network errors, 5xx errors, and JSON parsing errors.
+        // All of these are considered retriable.
+        lastKnownError = e;
+        if (LOG.logger) {
+          const errorMessage = e instanceof Error ? e.message : String(e);
+          LOG.logger.error(
+            `${AUTH_TOKEN_GENERIC_ERROR}. Encountered retriable error: ${errorMessage}`
+          );
+        }
       }
 
-      // Check if we should retry
-      if (attemptNumber < maxAttempts) {
+      // If we're here, a retriable error occurred. Wait before the next attempt.
+      if (attempt < maxAttempts) {
         if (LOG.logger) LOG.logger.debug(`Retrying after ${delayMs}ms...`);
         await delay(delayMs);
-        attemptNumber++;
-      } else {
-        if (LOG.logger) LOG.logger.debug("Retry attempts exhausted! Not retrying");
-        break;
       }
     }
 
-    // Create a proper Error instance to prevent retries on top of retries from service call
-    const error = new Error(
-      lastKnownError || "Failed to get security token after all retry attempts"
+    // If the loop completes, all attempts have failed.
+    const finalError = new Error(
+      lastKnownError?.message || "Failed to get security token after all retry attempts"
     );
-    (error as any).shouldBeRetried = false;
-    (error as any).code = -1;
-    throw error;
+    // Preserve the original error as the cause for better debugging
+    if (lastKnownError) (finalError as any).cause = lastKnownError;
+    (finalError as any).shouldBeRetried = false;
+    (finalError as any).code = -1;
+    throw finalError;
   }
 
   private async getTokenAsync(): Promise<Response> {
@@ -249,7 +203,7 @@ export default class TokenExchangeFederationClient implements FederationClient {
       // Create request body and call auth service.
       const url = this.tokenExchangeEndpoint;
 
-      // Resolve the subject token:
+      // Resolve the subject token (token being exchanged for UPST):
       // - If subjectToken is a callback, invoke it to get fresh token each time
       // - If subjectToken is a string, use it directly
       let resolvedSubjectToken: string;
@@ -260,7 +214,7 @@ export default class TokenExchangeFederationClient implements FederationClient {
           resolvedSubjectToken = await this.subjectToken();
         } catch (error) {
           throw new Error(
-            `Failed to get token from callback: ${
+            `Failed to get subject token from callback: ${
               error instanceof Error ? error.message : "Unknown error"
             }`
           );

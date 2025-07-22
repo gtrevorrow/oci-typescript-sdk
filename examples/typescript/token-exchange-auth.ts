@@ -17,8 +17,8 @@
  *    - Example: "https://identity.oraclecloud.com"
  *    - This is the OCI IAM Domain endpoint for your tenancy
  *
- * 2. OCI_THIRD_PARTY_TOKEN (Required)
- *    - The third-party JWT token to exchange for an OCI token
+ * 2. OCI_SUBJECT_TOKEN (Required)
+ *    - The subject JWT token to exchange for an OCI token
  *    - Example: GitHub Actions provides this via ACTIONS_ID_TOKEN_REQUEST_TOKEN
  *    - AWS provides this via AWS_WEB_IDENTITY_TOKEN
  *    - Azure provides this via ACTIONS_ID_TOKEN_REQUEST_TOKEN
@@ -42,14 +42,14 @@
  * 2. Explicit Configuration:
  *    TokenExchangeIdentityAuthenticationDetailsProvider.builder()
  *      .withDomainHost("https://identity.oraclecloud.com")
- *      .withThirdPartyToken("your_jwt_token_here")
+ *      .withSubjectToken("your_jwt_token_here")
  *      .withClientCredentials("base64_encoded_client_id_secret")
  *      .withRegion(Region.US_ASHBURN_1)
  *      .build()
  *
- * 3. Callback Provider (Fresh tokens on each exchange):
+ * 3. Callback Provider (Fresh 3rd Party/Subject tokens on each exchange):
  *    TokenExchangeIdentityAuthenticationDetailsProvider.builder()
- *      .withThirdPartyTokenProviderCallback(async () => {
+ *      .withSubjectToken(async () => {
  *        // Fetch fresh token from external source
  *        return await getLatestTokenFromExternalSource();
  *      })
@@ -100,7 +100,7 @@ console.log("=== Debug logging enabled - you will see retry attempts and respons
   // Example 1: Environment Variables (Automatic)
   console.log("[Example 1] Using environment variables:");
   console.log("OCI_IAM_DOMAIN_HOST:", process.env.OCI_IAM_DOMAIN_HOST);
-  console.log("OCI_THIRD_PARTY_TOKEN:", process.env.OCI_THIRD_PARTY_TOKEN ? "SET" : "NOT SET");
+  console.log("OCI_SUBJECT_TOKEN:", process.env.OCI_SUBJECT_TOKEN ? "SET" : "NOT SET");
   console.log("OCI_CLIENT_CREDENTIALS:", process.env.OCI_CLIENT_CREDENTIALS ? "SET" : "NOT SET");
   console.log("OCI_REGION:", process.env.OCI_REGION);
   const envProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
@@ -112,11 +112,11 @@ console.log("=== Debug logging enabled - you will see retry attempts and respons
 
   // Example 2: Explicit Builder Configuration
   const IAM_DOMAIN_HOST = process.env.OCI_IAM_DOMAIN_HOST!;
-  const THIRD_PARTY_TOKEN = process.env.OCI_THIRD_PARTY_TOKEN!;
+  const SUBJECT_TOKEN = process.env.OCI_SUBJECT_TOKEN!;
   const CLIENT_CREDENTIALS = process.env.OCI_CLIENT_CREDENTIALS!;
   const explicitProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
     .withDomainHost(IAM_DOMAIN_HOST)
-    .withThirdPartyToken(THIRD_PARTY_TOKEN)
+    .withSubjectToken(SUBJECT_TOKEN)
     .withClientCredentials(CLIENT_CREDENTIALS)
     .withRegion(Region.US_ASHBURN_1)
     .build();
@@ -127,13 +127,13 @@ console.log("=== Debug logging enabled - you will see retry attempts and respons
   console.log("[Example 2] Regions:", explicitResponse.items.map(r => r.name).join(", "));
 
   // Example 3: Callback Provider (Fresh tokens on each exchange)
-  const thirdPartyTokenCallback = async (): Promise<string> => {
-    const token = process.env.OCI_THIRD_PARTY_TOKEN;
-    if (!token) throw new Error("OCI_THIRD_PARTY_TOKEN environment variable is not set");
+  const subjectTokenCallback = async (): Promise<string> => {
+    const token = process.env.OCI_SUBJECT_TOKEN;
+    if (!token) throw new Error("OCI_SUBJECT_TOKEN environment variable is not set");
     return token;
   };
   const callbackProvider = TokenExchangeIdentityAuthenticationDetailsProvider.builder()
-    .withThirdPartyTokenProviderCallback(thirdPartyTokenCallback)
+    .withSubjectToken(subjectTokenCallback) // Use callback for dynamic token retrieval
     .withRegion(Region.US_ASHBURN_1)
     .build();
   const callbackIdentityClient = new IdentityClient({
