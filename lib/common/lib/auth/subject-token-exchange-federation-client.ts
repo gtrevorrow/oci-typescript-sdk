@@ -102,7 +102,10 @@ export default class SubjectTokenExchangeFederationClient implements FederationC
 
       if (response.status !== 200) {
         const errorBody = await response.text();
-        if (LOG.logger) LOG.logger.error(`Token exchange request failed with status ${response.status}. Body: ${errorBody}`);
+        if (LOG.logger)
+          LOG.logger.error(
+            `Token exchange request failed with status ${response.status}. Body: ${errorBody}`
+          );
         throw new Error(
           `${AUTH_TOKEN_GENERIC_ERROR}. Response failed with status: ${response.status}`
         );
@@ -116,7 +119,8 @@ export default class SubjectTokenExchangeFederationClient implements FederationC
       if (typeof responseBody.token !== "string" || !responseBody.token) {
         const errorMessage = `Invalid UPST token received from OCI IAM Domain. ${TOKEN_EXCHANGE_GENERIC_ERROR}`;
         if (LOG.logger) LOG.logger.error(errorMessage);
-        if (LOG.logger) LOG.logger.debug(`Full response body: ${JSON.stringify(responseBody, null, 2)}`);
+        if (LOG.logger)
+          LOG.logger.debug(`Full response body: ${JSON.stringify(responseBody, null, 2)}`);
         throw new Error(errorMessage);
       }
 
@@ -176,76 +180,7 @@ export default class SubjectTokenExchangeFederationClient implements FederationC
 
       const requestPayload = new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-        requested_token_type: "urn:oci:token-type:oci-upst",
-        public_key: AuthUtils.sanitizeCertificateString(publicKey),
-        subject_token: resolvedSubjectToken,
-        subject_token_type: "jwt"
-      }).toString();
-
-      const headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${this.clientCred}`
-      };
-
-      const requestObj: HttpRequest = {
-        uri: url,
-        body: requestPayload,
-        method: "POST",
-        headers: new Headers(headers)
-      };
-
-      const httpClient = new FetchHttpClient(null);
-
-      // Call OCI IAM Domain token endpoint to get a base64 encoded JSON object which contains the auth token
-      const response = await httpClient.send(requestObj);
-      return response;
-    } catch (e) {
-      throw Error(`Failed to call OCI IAM Domain, error: ${e}. ${TOKEN_EXCHANGE_GENERIC_ERROR}`);
-    }
-  }
-}
-  private async getTokenAsync(): Promise<Response> {
-    const keyPair = this.sessionKeySupplier.getKeyPair();
-    if (!keyPair) {
-      throw Error("keyPair for session was not provided");
-    }
-    const publicKey = keyPair.getPublic();
-    if (!publicKey) {
-      throw Error("Public key is not present");
-    }
-
-    try {
-      // Create request body and call auth service.
-      const url = this.tokenExchangeEndpoint;
-
-      // Resolve the subject token (token being exchanged for UPST):
-      // - If subjectToken is a callback, invoke it to get fresh token each time
-      // - If subjectToken is a string, use it directly
-      let resolvedSubjectToken: string;
-
-      if (typeof this.subjectToken === "function") {
-        // Callback has highest precedence - invoke it to get fresh token
-        try {
-          resolvedSubjectToken = await this.subjectToken();
-        } catch (error) {
-          throw new Error(
-            `Failed to get subject token from callback: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`
-          );
-        }
-      } else {
-        // Use the provided string token (this already includes the precedence logic from the builder)
-        resolvedSubjectToken = this.subjectToken;
-      }
-
-      if (!resolvedSubjectToken) {
-        throw new Error("Resolved subject token is empty or null");
-      }
-
-      const requestPayload = new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-        requested_token_type: "urn:oci:token-type:oci-upst",
+        requested_token_type: "urn:oci-token-type:oci-upst",
         public_key: AuthUtils.sanitizeCertificateString(publicKey),
         subject_token: resolvedSubjectToken,
         subject_token_type: "jwt"

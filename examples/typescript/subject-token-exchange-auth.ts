@@ -118,7 +118,3 @@ console.log("=== Debug logging enabled - you will see retry attempts and respons
   const callbackResponse = await callbackIdentityClient.listRegions({});
   console.log("[Example 2] Regions:", callbackResponse.items.map(r => r.name).join(", "));
 })();
-  });
-  const callbackResponse = await callbackIdentityClient.listRegions({});
-  console.log("[Example 2] Regions:", callbackResponse.items.map(r => r.name).join(", "));
-})();
