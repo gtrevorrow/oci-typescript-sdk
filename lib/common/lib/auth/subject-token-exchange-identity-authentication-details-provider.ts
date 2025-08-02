@@ -8,17 +8,13 @@ import RefreshableOnNotAuthenticatedProvider from "./models/refreshable-on-not-a
 import SessionKeySupplierImpl from "./session-key-supplier";
 import SessionKeySupplier from "./models/session-key-supplier";
 import FederationClient from "./models/federation-client";
-import TokenExchangeFederationClient from "./token-exchange-federation-client";
+import SubjectTokenExchangeFederationClient from "./subject-token-exchange-federation-client";
 import { RegionProvider } from "./auth";
 import { Region } from "../region";
 
-export default class TokenExchangeIdentityAuthenticationDetailsProvider
+export default class SubjectTokenExchangeIdentityAuthenticationDetailsProvider
   extends AbstractRequestingAuthenticationDetailsProvider
   implements RegionProvider, RefreshableOnNotAuthenticatedProvider<String> {
-  // Environment variable names
-  public static readonly IAM_DOMAIN_HOST_ENV_VAR_NAME = "OCI_IAM_DOMAIN_HOST";
-  public static readonly SUBJECT_TOKEN_ENV_VAR_NAME = "OCI_SUBJECT_TOKEN";
-
   // session key supplier
   protected _sessionKeySupplier!: SessionKeySupplier;
 
@@ -40,15 +36,8 @@ export default class TokenExchangeIdentityAuthenticationDetailsProvider
 
   getRegion(): Region {
     if (!this._region) {
-      // Try to get region from environment variable
-      const regionString = process.env.OCI_REGION;
-      if (regionString) {
-        this._region = Region.fromRegionId(regionString);
-      } else {
-        throw new Error(
-          "Region not specified. Set OCI_REGION environment variable or provide region in constructor."
-        );
-      }
+      // Environment variable fallback removed.
+      throw new Error("Region not specified. Please provide region in constructor.");
     }
     return this._region;
   }
@@ -114,55 +103,43 @@ class TokenExchangeIdentityAuthenticationDetailsProviderBuilder {
     return this;
   }
 
-  public build(): TokenExchangeIdentityAuthenticationDetailsProvider {
+  public build(): SubjectTokenExchangeIdentityAuthenticationDetailsProvider {
     let federationClient: FederationClient;
     let sessionKeySupplier: SessionKeySupplier;
 
-    const domainHost =
-      this.domainHost ||
-      process.env[TokenExchangeIdentityAuthenticationDetailsProvider.IAM_DOMAIN_HOST_ENV_VAR_NAME];
+    const domainHost = this.domainHost;
 
     if (!domainHost) {
-      throw Error(
-        `${TokenExchangeIdentityAuthenticationDetailsProvider.IAM_DOMAIN_HOST_ENV_VAR_NAME} is missing. Please set it in the environment variables or use the builder's withDomainHost method.`
-      );
+      throw Error("domainHost is missing. Please use the builder's withDomainHost method.");
     }
 
     // Determine the subject token with proper precedence:
     // 1. Direct value from builder (string or function)
-    // 2. Environment variable as fallback
-    let subjectToken: string | (() => Promise<string>);
+    // Environment variable fallback removed.
+    const subjectToken = this.subjectToken;
 
-    if (this.subjectToken !== undefined) {
-      subjectToken = this.subjectToken;
-    } else {
-      const tokenValue =
-        process.env[TokenExchangeIdentityAuthenticationDetailsProvider.SUBJECT_TOKEN_ENV_VAR_NAME];
-
-      if (!tokenValue) {
-        throw Error(
-          `${TokenExchangeIdentityAuthenticationDetailsProvider.SUBJECT_TOKEN_ENV_VAR_NAME} is missing. Please set it in the environment variables or use the builder's withSubjectToken method.`
-        );
-      }
-      subjectToken = tokenValue;
+    if (!subjectToken) {
+      throw Error(
+        "subjectToken is missing. Please use the builder's withSubjectToken method."
+      );
     }
 
-    const clientCred = this.clientCred || process.env.OCI_CLIENT_CREDENTIALS;
+    const clientCred = this.clientCred;
     if (!clientCred) {
       throw Error(
-        "OCI_CLIENT_CREDENTIALS is missing. Please set it in the environment variables or use the builder's withClientCredentials method."
+        "clientCred is missing. Please use the builder's withClientCredentials method."
       );
     }
 
     // Initialize everything
     sessionKeySupplier = new SessionKeySupplierImpl();
-    federationClient = new TokenExchangeFederationClient(
+    federationClient = new SubjectTokenExchangeFederationClient(
       `https://${domainHost}/oauth2/v1/token`,
       subjectToken,
       sessionKeySupplier,
       clientCred
     );
-    return new TokenExchangeIdentityAuthenticationDetailsProvider(
+    return new SubjectTokenExchangeIdentityAuthenticationDetailsProvider(
       federationClient,
       sessionKeySupplier,
       this.region
