@@ -4,7 +4,7 @@
  */
 
 /**
- * OCI Subject Token Exchange Authentication Example
+ * OCI Workload Identity Federation Authentication Example
  *
  * This example demonstrates how to use subject token exchange authentication to authenticate
  * with OCI services using a third-party token (e.g., from GitHub Actions, AWS, Azure, etc.).
@@ -19,7 +19,7 @@
  * You can configure the authentication provider using the builder pattern:
  *
  * 1. Explicit Configuration:
- *    SubjectTokenExchangeIdentityAuthenticationDetailsProvider.builder()
+ *    WorkloadIdentityFederationAuthenticationDetailsProvider.builder()
  *      .withDomainHost("your_iam_domain_host")
  *      .withSubjectToken("your_jwt_token_here")
  *      .withClientCredentials("base64_encoded_client_id_secret")
@@ -27,7 +27,7 @@
  *      .build()
  *
  * 2. Callback Provider (Fresh Subject tokens on each exchange):
- *    SubjectTokenExchangeIdentityAuthenticationDetailsProvider.builder()
+ *    WorkloadIdentityFederationAuthenticationDetailsProvider.builder()
  *      .withDomainHost("your_iam_domain_host")
  *      .withClientCredentials("base64_encoded_client_id_secret")
  *      .withSubjectToken(async () => {
@@ -45,7 +45,7 @@
 import { IdentityClient } from "../../lib/identity/lib/client";
 import { Region } from "oci-common/lib/region";
 import { AuthenticationDetailsProvider } from "../../target/lib/common";
-import SubjectTokenExchangeIdentityAuthenticationDetailsProvider from "oci-common/lib/auth/subject-token-exchange-identity-authentication-details-provider";
+import WorkloadIdentityFederationAuthenticationDetailsProvider from "oci-common/lib/auth/workload-identity-federation-authentication-details-provider";
 import { LOG } from "oci-common/lib/log";
 
 // Configure debug logging to see retry behavior and authentication flow
@@ -86,7 +86,7 @@ console.log("=== Debug logging enabled - you will see retry attempts and respons
   }
 
   console.log("[Example 1] Using explicit builder configuration:");
-  const explicitProvider = SubjectTokenExchangeIdentityAuthenticationDetailsProvider.builder()
+  const explicitProvider = WorkloadIdentityFederationAuthenticationDetailsProvider.builder()
     .withDomainHost(IAM_DOMAIN_HOST)
     .withSubjectToken(SUBJECT_TOKEN)
     .withClientCredentials(CLIENT_CREDENTIALS)
@@ -106,7 +106,7 @@ console.log("=== Debug logging enabled - you will see retry attempts and respons
     console.log("Callback invoked to fetch fresh subject token.");
     return token;
   };
-  const callbackProvider = SubjectTokenExchangeIdentityAuthenticationDetailsProvider.builder()
+  const callbackProvider = WorkloadIdentityFederationAuthenticationDetailsProvider.builder()
     .withDomainHost(IAM_DOMAIN_HOST)
     .withClientCredentials(CLIENT_CREDENTIALS)
     .withSubjectToken(subjectTokenCallback) // Use callback for dynamic token retrieval

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2020, 2021 Oracle and/or its affiliates.  All rights reserved.
+ * Copyright (c) 2020, 2025 Oracle and/or its affiliates.  All rights reserved.
  * This software is dual-licensed to you under the Universal Permissive License (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl or Apache License 2.0 as shown at http://www.apache.org/licenses/LICENSE-2.0. You may choose either license.
  */
 
@@ -12,8 +12,20 @@ import { LOG } from "../log";
 import AuthUtils from "./helpers/auth-utils";
 
 /**
- * This class gets a security token from OCI IAM Domain token endpoint by exchanging a subject token.
- * It will not retry failed requests, and will fail fast on any errors.
+ * This class gets a security token from OCI IAM Domain token endpoint by exchanging a subject token @link{https://docs.oracle.com/en-us/iaas/Content/Identity/api-getstarted/json_web_token_exchange.htm}.
+ * It uses a session key supplier to manage session keys and token validity.
+ * The subject token can be provided as a string or as a callback function that returns a promise
+ * resolving to the token. This allows for dynamic retrieval of the subject token, such as from
+ * external sources like GitHub Actions, AWS, Azure, etc.
+ * The federation client does not implement a retry policy,
+ * meaning it will fail immediately on any errors during the token exchange process.
+ * @class WorkloadIdentityFederationClient
+ * @implements {FederationClient}
+ * @constructor
+ * @param {string} tokenExchangeEndpoint - The endpoint URL for the OCI IAM Domain token exchange.
+ * @param {string | (() => Promise<string>)} subjectToken - The subject token to exchange for a security token.
+ * @param {SessionKeySupplier} sessionKeySupplier - The supplier for session keys used to manage token validity.
+ * @param {string} clientCred - The base64 encoded client ID and secret for authentication with the token exchange endpoint.
  */
 
 const TOKEN_EXCHANGE_GENERIC_ERROR =
@@ -21,9 +33,9 @@ const TOKEN_EXCHANGE_GENERIC_ERROR =
 
 const AUTH_TOKEN_GENERIC_ERROR = "Failed to fetch the token from auth server";
 
-export default class SubjectTokenExchangeFederationClient implements FederationClient {
+export default class WorkloadIdentityFederationClient implements FederationClient {
   // Manages caching and validation of security tokens (JWT) with associated session keys
-  securityTokenAdapter: SecurityTokenAdapter;
+  private securityTokenAdapter: SecurityTokenAdapter;
   private _refreshPromise: Promise<string> | null = null;
 
   constructor(
@@ -63,6 +75,13 @@ export default class SubjectTokenExchangeFederationClient implements FederationC
     return await this.refreshAndGetSecurityTokenInner(false);
   }
 
+  /**
+   * Refreshes the security token by making a request to the OCI IAM Domain token endpoint.
+   * This method will always retrieve a new token from the federation endpoint and does not use a cached token.
+   * It will also handle the session key refresh and update the security token adapter accordingly.
+   * @return A promise that resolves to the new security token.
+   * @throws Error If there is an issue with the token exchange process, including network errors or invalid responses.
+   */
   private async refreshAndGetSecurityTokenInner(
     doFinalTokenValidityCheck: boolean
   ): Promise<string> {
@@ -139,6 +158,11 @@ export default class SubjectTokenExchangeFederationClient implements FederationC
     }
   }
 
+  /**
+   * Makes a request to the OCI IAM Domain token endpoint to exchange the subject token for a UPST token.
+   * @return A promise that resolves to the HTTP response containing the UPST token.
+   * @throws Error If there is an issue with the request or response.
+   */
   private async getTokenAsync(): Promise<Response> {
     const keyPair = this.sessionKeySupplier.getKeyPair();
     if (!keyPair) {
