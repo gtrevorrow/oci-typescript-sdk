@@ -3,6 +3,44 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
+## 2.114.0 - 2025-07-29
+### Added 
+- Support for the APIP Platform service 
+- Support for resource locking for all resources in the API Gateway service 
+- Support for optional parameters in the import and export dashboard APIs in the Management Dashboard service 
+- Support for agent configurations and MACS extension configurations in the Application Performance Monitoring service 
+- Support for specifying replication configuration when creating or updating a secret in the Vault service 
+- Support for CPU architecture agnostic configurations in the PostgreSQL service 
+- Support for creating, deploying, cloning, getting, listing, activating and deactivating model groups in the Data Science service 
+- Support for creating, updating, getting, listing and deleting model group version history in the Data Science service 
+- Support for uploading and downloading model group artifacts in the Data Science service 
+- Support for listing the state of the deployed models associated with a model group in the Data Science service 
+- Support for updating model group deployments in the Data Science service 
+- Support for burstable shapes in data science notebooks, machine learning jobs and machine learning pipelines in the Data Science service 
+- Support for multilingual text to speech for 8 more languages in the AI Speech service    
+
+### Breaking Changes 
+- The field `languageCode` was changed from type `VoiceSummary.LanguageCode` to `string` in the model `VoiceSummary` in the AI Speech service
+
+## 2.113.0 - 2025-07-22
+### Added 
+- Support for calling Oracle Cloud Infrastructure services in the `ap-batam-1` region 
+- Support for updating autonomous databases with schedule DB version upgrade in the Database service 
+- Support for new OKV Endpoint group parameter for Autonomous Container Database operations in the Database service 
+- Support for specifying tags in backup databases and standby databases in the Database service 
+- Support for cloud database systems and improved system monitoring in the Database Management service 
+- Support for stack, image, lead generation, and service listing types in the Marketplace service 
+- Support for adding custom metric-based policies in the Autoscaling service 
+- Support for Named Credentials in the Management Agent service 
+- Support for multilingual capability, user configured Agent-As-A-Tool, data ingestion of documents, and sequentially executed steps in the Generative AI Agent service 
+- Support for IAM authentication in the Cache service    
+
+### Breaking Changes 
+- The field `httpEndpointAuthConfigType` was removed from the model `HttpEndpointAuthConfig` in the Generative AI Agent service 
+- The model `HttpEndpointIdcsAuthConfig` was removed in the Generative AI Agent service 
+- The models `AttachmentSummary`, `Attachment`, `BuyerInformation`, `CreateAttachmentDetails`, `CreateOfferDetails`, `CreateOfferRequest`, `DeleteOfferRequest`, `ListAttachmentsRequest`, `ListOffersRequest`, `AttachmentClient`, `OfferClient`, `OfferCollection`, `OfferInternalDetail`, `OfferSummary`, `Offer`, `Pricing`, `ResourceBundle`, `SellerInformation`, and `UpdateOfferDetails` were removed in the Marketplace service 
+- The AI Anomaly Detection service has reached End-of-life
+
 ## 2.112.2 - 2025-07-15
 ### Added 
 - Support for calling Oracle Cloud Infrastructure services in the ap-delhi-1 region
